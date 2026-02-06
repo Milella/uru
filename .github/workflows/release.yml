@@ -1,0 +1,84 @@
+name: Build and Release URU
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build for ${{ matrix.os }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            goos: windows
+            arch: amd64
+            ext: .exe
+          - os: ubuntu-latest
+            goos: linux
+            arch: amd64
+            ext: ""
+          - os: macos-latest
+            goos: darwin
+            arch: amd64
+            ext: ""
+          - os: macos-latest
+            goos: darwin
+            arch: arm64
+            ext: ""
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          # Strip the leading "v" from the tag
+          echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build binary
+        run: |
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.arch }} \
+          go build -o uru_rt${{ matrix.ext }} cmd/uru/main.go
+
+      - name: Prepare ZIP
+        run: |
+          mkdir release
+          cp uru_rt${{ matrix.ext }} release/
+          cp README.md release/README.txt
+          cp LICENSE release/
+          cd release
+          zip uru-${{ steps.version.outputs.version }}-${{ matrix.goos }}-${{ matrix.arch }}.zip *
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: uru-${{ steps.version.outputs.version }}-${{ matrix.goos }}-${{ matrix.arch }}
+          path: release/*.zip
+
+  publish:
+    name: Publish Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

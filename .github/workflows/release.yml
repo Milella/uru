@@ -38,7 +38,6 @@ jobs:
           GOARCH: ${{ matrix.arch }}
         run: |
           mkdir -p dist
-          # Build binary as uru_rt (Windows will auto-append .exe)
           go build -o dist/uru_rt ./cmd/uru
 
       - name: Package ZIP

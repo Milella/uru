@@ -25,19 +25,43 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Build
+      - name: Extract version (strip leading v)
+        id: version
+        run: |
+          RAW="${GITHUB_REF_NAME}"
+          CLEAN="${RAW#v}"
+          echo "version=$CLEAN" >> $GITHUB_OUTPUT
+
+      - name: Build uru_rt
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.arch }}
         run: |
           mkdir -p dist
-          go build -v -o dist/uru-${{ matrix.goos }}-${{ matrix.arch }} ./cmd/uru
+          # Build binary as uru_rt (Windows will auto-append .exe)
+          go build -o dist/uru_rt ./cmd/uru
+
+      - name: Package ZIP
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          OS="${{ matrix.goos }}"
+          ARCH="${{ matrix.arch }}"
+
+          mkdir -p package
+          cp LICENSE package/
+          cp README.txt package/
+          cp dist/uru_rt package/
+
+          cd package
+          zip "../dist/uru-${OS}-${ARCH}-${VERSION}.zip" *
+          cd ..
+          rm -rf package
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: uru-${{ matrix.goos }}-${{ matrix.arch }}
-          path: dist/uru-${{ matrix.goos }}-${{ matrix.arch }}
+          path: dist/uru-${{ matrix.goos }}-${{ matrix.arch }}-${{ steps.version.outputs.version }}.zip
 
   release:
     name: Create GitHub Release
@@ -53,6 +77,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/**/*
+          files: dist/**/*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
